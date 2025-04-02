@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            height: 100%; 
+            width: 100%;
+        }
+        #panorama {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            background: white;
+            padding: 5px;
+            border: 1px solid black;
+            overflow-y: auto;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        #panorama .station-images {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        #panorama .station-images h3 {
+            margin-top: 0;
+            display: flex;       
+            align-items: center;
+        }
+        #panorama .station-images .image-container {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            position: relative;
+        }
+        #panorama .station-images img {
+            width: 150px;
+            height: auto;
+            margin: 0;
+        }
+        .bounding-box {
+            position: absolute;
+            box-sizing: border-box;
+            z-index: 1;
+        }
+        .heading-slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: 20px;
+        }
+        .heading-slider-container input[type="range"] {
+            width: 300px;
+        }
+        .heading-value {
+            font-weight: bold;
+            margin-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div id="panorama">
+        <div class="station-images" id="brand-images">
+            <h3>Brand <span class="heading-value">37°</span>&nbsp;&nbsp;<span class="heading-slider-container"><input type="range" min="0" max="3599" value="370" step="1" class="heading-slider"></span></h3>
+            <div class="image-container"></div>
+        </div>
+        <div class="station-images" id="rietschen-images">
+            <h3>Rietschen <span class="heading-value">37°</span>&nbsp;&nbsp;<span class="heading-slider-container"><input type="range" min="0" max="3599" value="370" step="1" class="heading-slider"></span></h3>
+            <div class="image-container"></div>
+        </div>
+        <div class="station-images" id="podrosche-images">
+            <h3>Podrosche <span class="heading-value">37°</span>&nbsp;&nbsp;<span class="heading-slider-container"><input type="range" min="0" max="3599" value="370" step="1" class="heading-slider"></span></h3>
+            <div class="image-container"></div>
+        </div>
+    </div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="leaflet-heat.js"></script>
+    <script src="script.js"></script> 
+</body>
+</html>

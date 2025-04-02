@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Map Project</title>
+        <link
+            rel="stylesheet"
+            href="https://unpkg.com/leaflet/dist/leaflet.css"
+        />
+        <link rel="stylesheet" href="./css/styles.css" />
+    </head>
+    <body>
+        <section id="map-container">
+            <div id="map"></div>
+            <div id="custom-elements">
+                <div class="tabs">
+                    <div class="tab active" data-tab="flyto">Fly To</div>
+                    <div class="tab" data-tab="circle">Circle</div>
+                    <div class="tab" data-tab="roi">ROI</div>
+                </div>
+
+                <div id="flyto" class="tab-content active">
+                    <h2>Fly To</h2>
+                    <div class="input-field">
+                        <label for="latitude-flyto">Latitude:</label>
+                        <input type="text" id="latitude-flyto" readonly />
+                    </div>
+                    <div class="input-field">
+                        <label for="longitude-flyto">Longitude:</label>
+                        <input type="text" id="longitude-flyto" readonly />
+                    </div>
+                    <div class="input-field">
+                        <label for="altitude-flyto">Altitude:</label>
+                        <input type="number" id="altitude-flyto" value="45" />
+                    </div>
+                    <button id="submit-flyto">Submit</button>
+                </div>
+
+                <div id="circle" class="tab-content">
+                    <h2>Circle</h2>
+                    <div class="input-field">
+                        <label for="latitude-circle">Latitude:</label>
+                        <input type="text" id="latitude-circle" readonly />
+                    </div>
+                    <div class="input-field">
+                        <label for="longitude-circle">Longitude:</label>
+                        <input type="text" id="longitude-circle" readonly />
+                    </div>
+                    <div class="input-field">
+                        <label for="altitude-circle">Altitude:</label>
+                        <input type="number" id="altitude-circle" value="45" />
+                    </div>
+                    <div class="input-field">
+                        <label for="radius">Radius:</label>
+                        <input type="number" id="radius" value="50" />
+                    </div>
+                    <button id="submit-circle">Submit</button>
+                </div>
+
+                <div id="roi" class="tab-content">
+                    <h2>ROI</h2>
+                    <div class="input-field">
+                        <label for="latitude-roi">Latitude:</label>
+                        <input type="text" id="latitude-roi" readonly />
+                    </div>
+                    <div class="input-field">
+                        <label for="longitude-roi">Longitude:</label>
+                        <input type="text" id="longitude-roi" readonly />
+                    </div>
+                    <div class="input-field">
+                        <label for="altitude-roi">Altitude:</label>
+                        <input type="number" id="altitude-roi" value="5" />
+                    </div>
+                    <button id="submit-roi">Submit</button>
+                </div>
+
+                <div class="message-box" id="message-box"></div>
+
+                <h3>Select UAV</h3>
+                <select id="uav-select"></select>
+                <div id="legend">
+                    <h4>Weather Warnings Legend</h4>
+                    <div><span style="background-color: #5c2d2d; width: 20px; height: 20px; display: inline-block;"></span> Extreme weather warnings (Level 4)</div>
+                    <div><span style="background-color: #a53e2d; width: 20px; height: 20px; display: inline-block;"></span> Severe weather warnings (Level 3)</div>
+                    <div><span style="background-color: #d69b2b; width: 20px; height: 20px; display: inline-block;"></span> Significant weather warnings (Level 2)</div>
+                    <div><span style="background-color: #f5e34f; width: 20px; height: 20px; display: inline-block;"></span> Weather warnings (Level 1)</div>
+                    <div><span style="background-color: #d6a4d6; width: 20px; height: 20px; display: inline-block;"></span> Heat warning (extreme)</div>
+                    <div><span style="background-color: #9d6ad6; width: 20px; height: 20px; display: inline-block;"></span> UV warning</div>
+                    <div><span style="background-color: #c5e1a5; width: 20px; height: 20px; display: inline-block;"></span> No warnings</div>
+                </div>
+            </div>
+        </section>
+
+        <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+        <script>
+            console.log("script loaded");
+
+            var map = L.map("map").setView([51.44, 14.77], 13);
+        
+        // Base layer
+        var baseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: "© OpenStreetMap",
+        }).addTo(map);
+
+        // DWD rain radar layer
+        var regenradar = L.tileLayer.wms("https://maps.dwd.de/geoproxy/service/", {
+            layers: 'RX-Produkt',
+            format: 'image/png',
+            styles: '',
+            transparent: true,
+            opacity: 0.6,
+            attribution: 'Radarkomposit (RX): &copy; <a href="https://maps.dwd.de/geoserver/wfs?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities">DWD</a>'
+        });
+
+        // Variable to hold weather warnings layer
+        let weatherWarningsLayer;
+
+        function fetchWeatherWarnings() {
+            const layerName = "dwd:Warnungen_Gemeinden_vereinigt"; // Correct WFS layer name
+            const wfsUrl = `https://maps.dwd.de/geoserver/wfs?service=WFS&version=2.0.0&request=GetFeature&typeName=${layerName}&outputFormat=application/json`;
+            console.log("Fetching from:", wfsUrl);
+
+            return fetch(wfsUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log("Fetched data:", data); // Check the structure of the data
+                    if (data.features && data.features.length > 0) {
+                        weatherWarningsLayer = L.geoJSON(data, {
+                            style: function(feature) {
+                                const rgbColor = feature.properties.EC_AREA_COLOR.split(' ');
+                                return {
+                                    color: `rgb(${rgbColor[0]}, ${rgbColor[1]}, ${rgbColor[2]})`,
+                                    weight: 2,
+                                    fillOpacity: 0.5
+                                };
+                            },
+                            onEachFeature: function(feature, layer) {
+                                // Show type of warning on hover
+                                layer.bindTooltip(feature.properties.EVENT || "No warning available", {
+                                    permanent: false,
+                                    sticky: true
+                                });
+
+                                // Show detailed description on click
+                                layer.on('click', function() {
+                                    layer.bindPopup(feature.properties.DESCRIPTION || "No description available").openPopup();
+                                });
+                            }
+                        })
+                    } else {
+                        console.log("No warnings available.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error fetching WFS data:", error.message || error);
+                })
+                .finally(() => {
+                    // Define baseMaps and overlayMaps only after fetching data
+                    var baseMaps = {
+                        "OpenStreetMap": baseLayer,
+                    };
+
+                    var overlayMaps = {
+                        "DWD Rain Radar": regenradar,
+                    };
+
+                    
+                    if (weatherWarningsLayer) {
+                        overlayMaps["Weather Warnings"] = weatherWarningsLayer; 
+                    }
+
+                    
+                    L.control.layers(baseMaps, overlayMaps).addTo(map);
+                });
+        }
+
+            const socket = new WebSocket("ws://localhost:4000");
+
+            
+            let dronePath = [];
+            let dronePolyline, droneMarker;
+            let selectedUAV = null;
+            
+            const droneIcon = L.icon({
+                iconUrl: "./icons/drone.png",
+                iconSize: [50, 50],
+                iconAnchor: [25, 25],
+                popupAnchor: [0, -32]
+            });
+
+            
+            function updateDroneLocation(droneData) {
+                const latestCoordinates = [droneData.latitude, droneData.longitude];
+
+                
+                dronePath.push(latestCoordinates);
+
+                
+                if (dronePath.length > 100) {
+                    dronePath.shift(); 
+                }
+
+                
+                if (dronePolyline) {
+                    map.removeLayer(dronePolyline);
+                }
+                if (droneMarker) {
+                    map.removeLayer(droneMarker);
+                }
+
+                
+                dronePolyline = L.polyline(dronePath, {
+                    color: "blue",
+                    dashArray: "5, 10", 
+                    lineCap: "round",
+                    weight: 3, 
+                }).addTo(map);
+
+                
+                droneMarker = L.marker(latestCoordinates, { icon: droneIcon })
+                    .bindPopup(`Current Altitude: ${droneData.altitude}`)
+                    .addTo(map);
+
+                
+                map.setView(latestCoordinates, map.getZoom());
+            }
+
+            
+            socket.addEventListener("open", () => {
+                console.log("WebSocket connection established.");
+            });
+
+            socket.addEventListener("message", (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    
+                    if (data.id === selectedUAV) {
+                        updateDroneLocation({
+                            latitude: data.lat,
+                            longitude: data.lng,
+                            altitude: data.altitude,
+                        });
+                    }
+                } catch (error) {
+                    console.error("Error parsing WebSocket message:", error);
+                }
+            });
+
+
+            socket.addEventListener("close", () => {
+                console.warn("WebSocket connection closed.");
+            });
+
+            socket.addEventListener("error", (error) => {
+                console.error("WebSocket error:", error);
+            });
+
+
+            
+            fetchWeatherWarnings();
+                var marker, circle, polyline, latestMarker;
+
+            function clearMapElements() {
+                console.log("clearMapElements called");
+                if (marker) {
+                    console.log("removing marker");
+                    map.removeLayer(marker);
+                    marker = null;
+                }
+                if (circle) {
+                    map.removeLayer(circle);
+                    circle = null;
+                }
+               
+            }
+
+            function clearDroneElements() {
+                clearMapElements();
+                if (polyline) {
+                    console.log("removing polyline");
+                    map.removeLayer(polyline);
+                    polyline = null;
+                }
+                if (latestMarker) {
+                    console.log("Removing latestMarker");
+                    map.removeLayer(latestMarker);
+                    latestMarker = null;
+                }
+
+            }
+            function updateInputs(lat, lng, activeTab) {
+                if (activeTab === "flyto") {
+                    document.getElementById("latitude-flyto").value = lat;
+                    document.getElementById("longitude-flyto").value = lng;
+                } else if (activeTab === "circle") {
+                    document.getElementById("latitude-circle").value = lat;
+                    document.getElementById("longitude-circle").value = lng;
+                } else if (activeTab === "roi") {
+                    document.getElementById("latitude-roi").value = lat;
+                    document.getElementById("longitude-roi").value = lng;
+                }
+            }
+
+            map.on("click", function (e) {
+                var lat = e.latlng.lat;
+                var lng = e.latlng.lng;
+
+                clearMapElements();
+
+                var activeTab =
+                    document.querySelector(".tab.active").dataset.tab;
+
+                if (activeTab === "flyto") {
+                    marker = L.marker([lat, lng], { draggable: true }).addTo(
+                        map
+                    );
+                    updateInputs(lat, lng, activeTab);
+                } else if (activeTab === "circle") {
+                    marker = L.marker([lat, lng], { draggable: true }).addTo(
+                        map
+                    );
+                    var radius = document.getElementById("radius").value;
+                    circle = L.circle([lat, lng], { radius: radius }).addTo(
+                        map
+                    );
+                    updateInputs(lat, lng, activeTab);
+                } else if (activeTab === "roi") {
+                    marker = L.marker([lat, lng], { draggable: true }).addTo(
+                        map
+                    );
+                    updateInputs(lat, lng, activeTab);
+                }
+
+                marker.on("dragend", function (e) {
+                    var newLat = e.target.getLatLng().lat;
+                    var newLng = e.target.getLatLng().lng;
+                    updateInputs(newLat, newLng, activeTab);
+                    if (circle) {
+                        circle.setLatLng([newLat, newLng]);
+                    }
+                });
+            });
+
+            document
+                .getElementById("radius")
+                .addEventListener("input", function () {
+                    if (circle) {
+                        circle.setRadius(this.value);
+                    }
+                });
+
+            document.querySelectorAll(".tab").forEach((tab) => {
+                tab.addEventListener("click", function () {
+                    console.log("tab clicked " + this.dataset.tab);
+                    document
+                        .querySelector(".tab.active")
+                        .classList.remove("active");
+                    document
+                        .querySelector(".tab-content.active")
+                        .classList.remove("active");
+                    this.classList.add("active");
+                    document
+                        .getElementById(this.dataset.tab)
+                        .classList.add("active");
+                    clearMapElements();
+                });
+            });
+                function sendDataToBackend(uavId, commandId, lat, lng, alt, radius) {
+                    const data = {
+                        UAVID: uavId,
+                        CommandID: parseInt(commandId),
+                        Lat: parseFloat(lat),
+                        Lon: parseFloat(lng),
+                        Alt: parseInt(alt),
+                        Radius: parseInt(radius)
+                    };
+
+                    fetch('http://zkms.waldwaechter.de:4000/sendData', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Success:', data);
+                    })
+                    .catch((error) => {
+                        console.error('Error:', error);
+                    });
+                }
+
+                function getSelectedUAV() {
+                    const uavSelect = document.getElementById("uav-select");
+                    return uavSelect.options[uavSelect.selectedIndex].value;
+                    console.log("Selected UAV:", selectedUAV);
+                    console.log("Selected UAV:", selectedUAV); 
+                    return selectedUAV;
+                }
+
+            document
+                .getElementById("submit-flyto")
+                .addEventListener("click", function () {
+                    const lat = document.getElementById("latitude-flyto").value;
+                    const lng = document.getElementById("longitude-flyto").value;
+                    const alt = document.getElementById("altitude-flyto").value;
+                    const uavId = getSelectedUAV();
+                    sendDataToBackend(uavId,'1', lat, lng, alt,);
+                    var messageBox = document.getElementById("message-box");
+
+                    messageBox.style.display = "block";
+                    messageBox.innerHTML =
+                        "Fly To Coordinates Submitted: Latitude " +
+                        lat +
+                        ", Longitude " +
+                        lng +
+                        ", Altitude " +
+                        alt;
+                });
+
+            document
+                .getElementById("submit-circle")
+                .addEventListener("click", function () {
+                    const lat = document.getElementById("latitude-circle").value;
+                    const lng = document.getElementById("longitude-circle").value;
+                    const alt = document.getElementById("altitude-circle").value;
+                    const radius = document.getElementById("radius").value;
+                    const uavId = getSelectedUAV();
+                    sendDataToBackend(uavId,'3', lat, lng, alt, radius);
+                    var messageBox = document.getElementById("message-box");
+
+                    messageBox.style.display = "block";
+                    messageBox.innerHTML =
+                        "Circle Coordinates Submitted: Latitude " +
+                        lat +
+                        ", Longitude " +
+                        lng +
+                        ", Altitude " +
+                        alt +
+                        ", Radius " +
+                        radius;
+                });
+
+            document
+                .getElementById("submit-roi")
+                .addEventListener("click", function () {
+                    const lat = document.getElementById("latitude-roi").value;
+                    const lng = document.getElementById("longitude-roi").value;
+                    const alt = document.getElementById("altitude-roi").value;
+                    const uavId = getSelectedUAV();
+                    sendDataToBackend(uavId,'4', lat, lng, alt,);
+                    var messageBox = document.getElementById("message-box");
+
+                    messageBox.style.display = "block";
+                    messageBox.innerHTML =
+                        "ROI Coordinates Submitted: Latitude " +
+                        lat +
+                        ", Longitude " +
+                        lng +
+                        ", Altitude " +
+                        alt;
+                });
+
+                var uavIcon = L.icon({
+        	        iconUrl: "./icons/drone.png", 
+                    iconSize: [50, 50], 
+                    iconAnchor: [25, 25], 
+                    popupAnchor: [0, -32] 
+                });
+
+                
+
+                async function fetchUAVs() {
+                    try {
+                        const response = await fetch("http://zkms.waldwaechter.de:4000/uavs");
+                        const uavs = await response.json();
+                        const select = document.getElementById("uav-select");
+
+                        
+                        uavs.forEach((uav) => {
+                            const option = document.createElement("option");
+                            option.value = uav;
+                            option.textContent = uav;
+                            select.appendChild(option);
+                        });
+
+                        
+                        if (uavs.length > 0) {
+                            selectedUAV = uavs[0];
+                            fetchUAVData(selectedUAV); 
+                            subscribeToUAV(selectedUAV); 
+                        }
+                    } catch (error) {
+                        console.error("Error fetching UAVs:", error);
+                    }
+                }
+
+            
+
+                async function fetchUAVData(uavName) {
+                    try {
+                        const response = await fetch(`http://zkms.waldwaechter.de:4000/uavs/${uavName}`);
+                        const data = await response.json();
+
+                        
+                        dronePath = data.map((record) => [record.latitude, record.longitude]);
+                        const latest = data[0];
+                        updateDroneLocation({
+                            latitude: latest.latitude,
+                            longitude: latest.longitude,
+                            altitude: latest.altitude,
+                        });
+                    } catch (error) {
+                        console.error("Error fetching UAV data:", error);
+                    }
+                }
+
+
+                function subscribeToUAV(uavName) {
+                    if (socket.readyState === WebSocket.OPEN) {
+                        socket.send(JSON.stringify({ type: "subscribe", uavId: uavName }));
+                    } else {
+                        console.warn("WebSocket is not open. Cannot subscribe to UAV.");
+                    }
+                }
+
+                document.getElementById("uav-select").addEventListener("change", function () {
+                    selectedUAV = this.value; 
+                    fetchUAVData(selectedUAV); 
+                    subscribeToUAV(selectedUAV); 
+                });
+
+                fetchUAVs();
+            
+        </script>
+    </body>
+</html>
